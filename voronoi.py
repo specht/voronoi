@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
 import math
+import copy
 import random
 from pysvg.structure import *
 from pysvg.shape import *
@@ -75,22 +76,101 @@ class Site(Vector):
         
 class BeachSpan:
     def __init__(self, _site):
+        self.circleEvent = None
         self.site = _site
+        self.__prev = None
+        self.__next = None
         
+    def setPrev(self, x):
+        self.__prev = x
+        
+    def getPrev(self):
+        return self.__prev
+        
+    prev = property(getPrev, setPrev)
+        
+    def setNext(self, x):
+        self.__next = x
+        
+    def getNext(self):
+        return self.__next
+        
+    next = property(getNext, setNext)
+    
+    def __repr__(self):
+        return '(span ' + str(self.site.label) + ')'
 
 class BeachLine:
     def __init__(self):
         self.spans = []
         
-    def handleSiteEvent(self, _site):
-        sweepy = _site.y
-        span = BeachSpan(_site)
-        # use binary search to insert new span at the correct position
-        spans.append(span)
-        
+    def handleSiteEvent(self, _event):
+        sweepy = _event.y
+        span = BeachSpan(_event.site)
+        if len(self.spans) == 0:
+            # there is no span yet
+            self.spans.append(span)
+        else:
+            # use binary search to insert new span at the correct position
+            l = 0
+            r = len(self.spans) - 1
+            while l < r:
+                # binary search
+                m = (r - l) // 2 + l
+                mr = INF
+                if m < len(self.spans) - 1:
+                    mr = self.beachSpanIntersection(self.spans[m], self.spans[m + 1], sweepy)
+                if span.site.x < mr:
+                    r = m
+                else:
+                    l = m + 1
+                    
+            # duplicate span and insert the copy
+            self.spans.insert(l + 1, copy.copy(self.spans[l]))
+            self.spans[l].next = self.spans[l + 1]
+            self.spans[l + 1].prev = self.spans[l]
+            
+            # insert the new span
+            span.prev = self.spans[l]
+            span.next = self.spans[l + 1]
+            self.spans[l].next = span
+            self.spans[l + 1].prev = span
+            self.spans.insert(l + 1, span)
+            
+            # now check whether there are new circle events (shrinking spans)
+            newSpanIndex = l + 1
+            if newSpanIndex > 1:
+                # check triplet left to new span
+                self.checkPotentialCircleEvent(self.spans[newSpanIndex - 1])
+            if newSpanIndex < len(self.spans) - 2:
+                # check triplet right to new span
+                self.checkPotentialCircleEvent(self.spans[newSpanIndex + 1])
+            
     def handleCircleEvent(self, _circle):
         pass
+    
+    def beachSpanIntersection(self, a, b, sweepy):
+        pby2 = b.site.y - sweepy
+        if (pby2 == 0.0):
+            return b.site.x
+            
+        plby2 = a.site.y - sweepy
+        if (plby2 == 0.0):
+            return a.site.x
+            
+        hl = a.site.x - b.site.x
+        aby2 = 1.0 / pby2 - 1.0 / plby2
+        bb = hl / plby2
         
+        if (aby2 != 0):
+            return (-bb + math.sqrt(bb * bb - 2.0 * aby2 * (hl * hl / (-2 * plby2) - a.site.y + plby2 / 2 + b.site.y - pby2 / 2))) / aby2 + b.site.x
+        return (a.site.x + b.site.x) / 2
+        
+    def checkPotentialCircleEvent(self, _span):
+        print("Checking for potential circle event at", _span.prev, _span, _span.next)
+        
+    def __repr__(self):
+        return ', '.join([str(_) for _ in self.spans])
 
 class Event:
     def __init__(self, _y):
@@ -270,15 +350,15 @@ def fortune(svg, outline, points, draw = False):
     for i, p in enumerate(points):
         heapq.heappush(futureEventList, SiteEvent(p.x, p.y, chr(65 + i)))
 
-    heapq.heappush(futureEventList, CircleEvent(100.0, 200.0))
-
     while len(futureEventList) > 0:
         event = heapq.heappop(futureEventList)
         print(event)
         if isinstance(event, SiteEvent):
-            pass
+            beachLine.handleSiteEvent(event)
         else:
-            pass
+            beachLine.handleCircleEvent(event)
+            
+        print(beachLine)
         
 
 if __name__ == '__main__': 
